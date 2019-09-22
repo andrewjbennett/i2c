@@ -6,9 +6,9 @@
 
 int main(void) {
 
-    double pressure = get_pressure();
     double temperature = get_temperature();
-
     printf ("temperature = %.1lf'C\n", temperature);
+
+    double pressure = get_pressure();
     printf ("pressure    = %.0lf hPa\n", pressure);
 }

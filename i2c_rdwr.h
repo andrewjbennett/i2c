@@ -2,5 +2,5 @@
 
 int i2c_rdwr(
 	unsigned int addr, unsigned int read, unsigned int offset,
-	unsigned int count, char *buf
+	unsigned int count, unsigned char *buf
 );

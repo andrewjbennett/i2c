@@ -68,10 +68,10 @@ struct options {
 };
 
 static int
-i2c_rdwr_transfer(char *dev, struct options i2c_opt, char *i2c_buf);
+i2c_rdwr_transfer(char *dev, struct options i2c_opt, unsigned char *i2c_buf);
 
 static void
-print_i2c_rdwr(int error, struct options i2c_opt, char *i2c_buf);
+print_i2c_rdwr(int error, struct options i2c_opt, unsigned char *i2c_buf);
 
 static struct options default_opts(void);
 

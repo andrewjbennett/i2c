@@ -76,7 +76,7 @@ double get_pressure(void) {
 
 	calib k = get_calib();
 	long ut = get_temperature_uncomp();
-	long up = get_pressure_uncomp();
+	long up = get_pressure_uncomp() >> (8 - oss);
 
 	// Temperature
 	long x1, x2, b5, t;
@@ -97,10 +97,10 @@ double get_pressure(void) {
 	x2 = (k.b1 * (b6 * b6 / (1<<12))) / (1<<16); show (x2);
 	x3 = ((x1 + x2) + 2) / (1<<2); show (x3);
 	b4 = (k.ac4 * (unsigned long)(x3 + 32768)) / (1<<15); show (b4);
-	b7 = ((unsigned long)up - b3) * (50000 >> oss); show (b7);
+	b7 = (((unsigned long)up - b3) * (50000 >> oss)); show (b7);
 	p = (b7 < 0x80000000ULL)
-		? (b7 * 2) / b4
-		: (b7 / b4) * 2
+		? ((b7 * 2) / b4)
+		: ((b7 / b4) * 2)
 		; show (p);
 	show ((b7 * 2) / b4);
 	show ((b7 / b4) * 2);
@@ -135,7 +135,7 @@ static long get_pressure_uncomp(void) {
 
 	usleep(READ_PRES_STD_WAIT);
 	i2c_rdwr(BMP180_ADDRESS, READ, REG_OUTPUT_MSB, OUTPUT_SIZE, buf);
-	int up = (buf[0] << 16) + (buf[1] << 8) + 0;
+	long up = (buf[0] << 16) + (buf[1] << 8) + 0;
 
 	return up;
 }

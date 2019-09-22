@@ -1,3 +1,9 @@
+// Andrew Bennett, 2019-09-22
+// Based on code by Jashank Jeremy, 2019-09-20 ish
+//
+// Data from reference sheet:
+// https://cdn-shop.adafruit.com/datasheets/BST-BMP180-DS000-09.pdf
+
 #include <stdio.h>
 #include <stdint.h>
 
@@ -6,6 +12,7 @@
 #include <stdlib.h>
 #include <math.h>
 
+#include "bmp180.h"
 #include "i2c_rdwr.h"
 
 typedef struct calib {
@@ -16,14 +23,20 @@ typedef struct calib {
 
 void bmp180(int UT, int UP);
 
-//#define show(x) printf("%3s = %ld\n", #x, (x));
-#define show(x) (x);
+#define DEBUG 0
+
+#define show(x) if (DEBUG) printf("%3s = %ld\n", #x, (x));
+//#define show(x) (x);
+
 
 #define REG_MEASUREMENT_CONTROL 0xF4
 #define REG_OUTPUT_MSB 0xF6
 
 #define CMD_READ_TEMP '.'
 #define CMD_READ_PRESSURE '4'
+
+#define READ_TEMP_WAIT     4500 // 4.5ms
+#define READ_PRES_STD_WAIT 7500 // 7.5ms
 
 #define INPUT_SIZE  1
 #define OUTPUT_SIZE 2
@@ -33,54 +46,18 @@ void bmp180(int UT, int UP);
 #define READ 1
 #define WRITE 0
 
-int main (int argc, char *argv[])
-{
-	int address = BMP180_ADDRESS;
+static long get_temperature_uncomp(void);
+static long get_pressure_uncomp(void);
 
-	char buf[10]; // heaps big
+// TODO: make this dynamic eventually I guess?
+static calib get_calib(void);
 
-	buf[0] = CMD_READ_TEMP;
-	i2c_rdwr(address, WRITE, REG_MEASUREMENT_CONTROL, INPUT_SIZE, buf);
-	sleep(1);
 
-	i2c_rdwr(address, READ, REG_OUTPUT_MSB, OUTPUT_SIZE, buf);
-	//print_buf(buf, 2);
-	int UT = (buf[0] << 8) + buf[1];
+// Returns temperature in degrees Celsius.
+double get_temperature(void) {
 
-	sleep(1);
-	buf[0] = CMD_READ_PRESSURE;
-	i2c_rdwr(address, WRITE, REG_MEASUREMENT_CONTROL, INPUT_SIZE, buf);
-
-	sleep(1);
-	i2c_rdwr(address, READ, REG_OUTPUT_MSB, OUTPUT_SIZE, buf);
-	int UP = (buf[0] << 16) + (buf[1] << 8) + 0;
-
-	bmp180(UT, UP);
-
-	return 0;
-}
-
-void bmp180(int UT, int UP) {
-
-	short    oss = 0;
-
-	calib k =
-	{
-		.ac1 = 0x2050,
-		.ac2 = 0xfb83,
-		.ac3 = 0xc740,
-		.ac4 = 0x8299,
-		.ac5 = 0x615d,
-		.ac6 = 0x4973,
-		.b1  = 0x1973,
-		.b2  = 0x002c,
-		.mb  = 0x8000,
-		.mc  = 0xd1f6,
-		.md  = 0x0b32,
-	};
-
-	long ut = UT;
-	long up = UP >> (8 - oss);
+	calib k = get_calib();
+	long ut = get_temperature_uncomp();
 
 	long x1, x2, b5, t;
 	x1 = ((ut - k.ac6) * k.ac5) / (1<<15);	show (x1);
@@ -88,8 +65,27 @@ void bmp180(int UT, int UP) {
 	b5 = x1 + x2;	show (b5);
 	t = (b5 + 8) / (1<<4);	show (t);
 
-	//printf ("temperature = %.1lf'C\n", t / 10.f);
+	return t / 10.f;
+}
 
+// Returns pressure in hPa.
+double get_pressure(void) {
+
+	// TODO: maybe implement this?
+	short oss = 0;
+
+	calib k = get_calib();
+	long ut = get_temperature_uncomp();
+	long up = get_pressure_uncomp();
+
+	// Temperature
+	long x1, x2, b5, t;
+	x1 = ((ut - k.ac6) * k.ac5) / (1<<15);	show (x1);
+	x2 = (k.mc * (1<<11)) / (x1 + k.md);	show (x2);
+	b5 = x1 + x2;	show (b5);
+	t = (b5 + 8) / (1<<4);	show (t);
+
+	// Pressure
 	long  b6, x3, b3, p;
 	unsigned long b4, b7;
 	b6 = b5 - 4000;	show (b6);
@@ -114,15 +110,50 @@ void bmp180(int UT, int UP) {
 	x2 = (-7357 * p) / (1<<16); show (x2);
 	p += (x1 + x2 + 3791) / (1<<4); show (p);
 
-	//printf ("pressure = %.0lf hPa\n", p / 100.f);
-
-	//double p0 = 101325.f;
-	double p0 = 101900.f;
-	double a = 44330.f * (1.f - pow(p/p0, -5.255f));
-
-	printf ("temperature = %.1lf'C\n", t / 10.f);
-	printf ("pressure    = %.0lf hPa\n", p / 100.f);
-	printf ("altitude    = %.0lf m\n", a);
+	return p / 100.f;
 }
 
+static long get_temperature_uncomp(void) {
+	char buf[10]; // heaps big
 
+	buf[0] = CMD_READ_TEMP;
+	i2c_rdwr(BMP180_ADDRESS, WRITE, REG_MEASUREMENT_CONTROL, INPUT_SIZE, buf);
+	usleep(READ_TEMP_WAIT);
+
+	i2c_rdwr(BMP180_ADDRESS, READ, REG_OUTPUT_MSB, OUTPUT_SIZE, buf);
+	//print_buf(buf, 2);
+	long ut = (buf[0] << 8) + buf[1];
+
+	return ut;
+}
+
+static long get_pressure_uncomp(void) {
+	char buf[10]; // heaps big
+
+	buf[0] = CMD_READ_PRESSURE;
+	i2c_rdwr(BMP180_ADDRESS, WRITE, REG_MEASUREMENT_CONTROL, INPUT_SIZE, buf);
+
+	usleep(READ_PRES_STD_WAIT);
+	i2c_rdwr(BMP180_ADDRESS, READ, REG_OUTPUT_MSB, OUTPUT_SIZE, buf);
+	int up = (buf[0] << 16) + (buf[1] << 8) + 0;
+
+	return up;
+}
+
+static calib get_calib(void) {
+	calib k =
+	{
+		.ac1 = 0x2050,
+		.ac2 = 0xfb83,
+		.ac3 = 0xc740,
+		.ac4 = 0x8299,
+		.ac5 = 0x615d,
+		.ac6 = 0x4973,
+		.b1  = 0x1973,
+		.b2  = 0x002c,
+		.mb  = 0x8000,
+		.mc  = 0xd1f6,
+		.md  = 0x0b32,
+	};
+	return k;
+}

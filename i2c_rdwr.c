@@ -53,8 +53,8 @@ __FBSDID("$FreeBSD$");
 #define	I2C_MODE_TRANSFER	4
 
 struct options {
-	int	width;
-	int	count;
+	unsigned int	width;
+	unsigned int	count;
 	int	verbose;
 	int	addr_set;
 	int	binary;
@@ -66,18 +66,6 @@ struct options {
 	uint32_t	addr;
 	uint32_t	off;
 };
-
-struct skip_range {
-	int	start;
-	int	end;
-};
-
-typedef struct calib {
-	int16_t  ac1, ac2, ac3;
-	uint16_t ac4, ac5, ac6;
-	int16_t b1, b2, mb, mc, md;
-} calib;
-
 
 static int
 i2c_rdwr_transfer(char *dev, struct options i2c_opt, char *i2c_buf);
@@ -94,12 +82,12 @@ static struct options default_opts(void);
 // buf: buffer of size `count` - caller creates
 
 int i2c_rdwr(
-	unsigned int addr, uint8_t read, unsigned int offset,
+	unsigned int addr, unsigned int read, unsigned int offset,
 	unsigned int count, unsigned char *buf)
 {
 
 	struct options i2c_opt = default_opts();
-	char *i2c_buf = buf;
+	unsigned char *i2c_buf = buf;
 	char *dev = I2C_DEV;
 
 	errno = 0;
@@ -130,7 +118,7 @@ int i2c_rdwr(
 }
 
 /* Print the output */
-void print_i2c_rdwr(int error, struct options i2c_opt, char *i2c_buf) {
+void print_i2c_rdwr(int error, struct options i2c_opt, unsigned char *i2c_buf) {
 
 	if (error != 0) {
 		fprintf(stderr, "Error?????\n");
@@ -175,7 +163,7 @@ void print_i2c_rdwr(int error, struct options i2c_opt, char *i2c_buf) {
  * driver to be handled as a single transfer.
  */
 static int
-i2c_rdwr_transfer(char *dev, struct options i2c_opt, char *i2c_buf)
+i2c_rdwr_transfer(char *dev, struct options i2c_opt, unsigned char *i2c_buf)
 {
 	struct iic_msg msgs[2];
 	struct iic_rdwr_data xfer;
@@ -209,7 +197,7 @@ i2c_rdwr_transfer(char *dev, struct options i2c_opt, char *i2c_buf)
 	 * because of the NOSTOP flag used above.
 	 */
 	if (i2c_opt.dir == 'w')
-		msgs[i].flags = IIC_M_WR | (i > 0) ? IIC_M_NOSTART : 0;
+		msgs[i].flags = IIC_M_WR | ( (i > 0) ? IIC_M_NOSTART : 0 );
 	else
 		msgs[i].flags = IIC_M_RD;
 	msgs[i].slave = i2c_opt.addr;

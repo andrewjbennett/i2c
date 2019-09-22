@@ -111,7 +111,9 @@ int i2c_rdwr(
 
 	int error = i2c_rdwr_transfer(dev, i2c_opt, i2c_buf);
 
-	print_i2c_rdwr(error, i2c_opt, i2c_buf);
+	if (i2c_opt.verbose) {
+		print_i2c_rdwr(error, i2c_opt, i2c_buf);
+	}
 
 	return error;
 

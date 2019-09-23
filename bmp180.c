@@ -118,6 +118,10 @@ static long get_temperature_uncomp(void) {
 
 	buf[0] = CMD_READ_TEMP;
 	i2c_rdwr(BMP180_ADDRESS, WRITE, REG_MEASUREMENT_CONTROL, INPUT_SIZE, buf);
+
+	// should be able to replace with
+	//i2c_put(BMP180_ADDRESS, REG_MEASUREMENT_CONTROL, CMD_READ_TEMP);
+
 	usleep(READ_TEMP_WAIT);
 
 	i2c_rdwr(BMP180_ADDRESS, READ, REG_OUTPUT_MSB, OUTPUT_SIZE, buf);

@@ -1,3 +1,5 @@
+// Andrew Bennett, 2019-09-22
+// Parts of this code taken from BSD, license below:
 /*-
  * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
  *
@@ -75,15 +77,30 @@ print_i2c_rdwr(int error, struct options i2c_opt, unsigned char *i2c_buf);
 
 static struct options default_opts(void);
 
-// address - e.g. 0x77
-// read: read vs write - true for read, false for write
-// offset: register - e.g. 0xF4 
-// count: number of bytes  - e.g. 2
-// buf: buffer of size `count` - caller creates
+int i2c_rdwr_put(
+		unsigned int addr, unsigned int offset,
+		unsigned char cmd)
+{
+	unsigned char buf[5];
+	buf[0] = cmd;
+	return i2c_rdwr(addr, 0, offset, 1, buf);
+}
+
+int i2c_read(
+		unsigned int addr, unsigned int offset
+		unsigned int count, unsigned char *buf) {
+	i2c_rdwr(addr, 1, offset, count, buf);
+}
+
+int i2c_write(
+		unsigned int addr, unsigned int offset
+		unsigned int count, unsigned char *buf) {
+	i2c_rdwr(addr, 0, offset, count, buf);
+}
 
 int i2c_rdwr(
-	unsigned int addr, unsigned int read, unsigned int offset,
-	unsigned int count, unsigned char *buf)
+		unsigned int addr, unsigned int read, unsigned int offset,
+		unsigned int count, unsigned char *buf)
 {
 
 	struct options i2c_opt = default_opts();
@@ -99,15 +116,15 @@ int i2c_rdwr(
 
 	i2c_opt.dir = read ? 'r' : 'w';
 	i2c_opt.off = offset,
-	i2c_opt.width = 8;
+		i2c_opt.width = 8;
 	i2c_opt.count = count;
 	i2c_opt.mode = I2C_MODE_TRANSFER;
 
 	if (i2c_opt.verbose)
 		fprintf(stderr, "dev: %s, addr: 0x%x, r/w: %c, "
-		    "offset: 0x%02x, width: %u, count: %u\n", dev,
-		    i2c_opt.addr >> 1, i2c_opt.dir, i2c_opt.off,
-		    i2c_opt.width, i2c_opt.count);
+				"offset: 0x%02x, width: %u, count: %u\n", dev,
+				i2c_opt.addr >> 1, i2c_opt.dir, i2c_opt.off,
+				i2c_opt.width, i2c_opt.count);
 
 	int error = i2c_rdwr_transfer(dev, i2c_opt, i2c_buf);
 
@@ -134,7 +151,7 @@ void print_i2c_rdwr(int error, struct options i2c_opt, unsigned char *i2c_buf) {
 	int j = 0;
 	while (i < i2c_opt.count) {
 		if (i2c_opt.verbose || (i2c_opt.dir == 'r' &&
-		    !i2c_opt.binary))
+					!i2c_opt.binary))
 			fprintf (stderr, "%02hhx ", i2c_buf[i++]);
 
 		if (i2c_opt.dir == 'r' && i2c_opt.binary) {
@@ -164,7 +181,7 @@ void print_i2c_rdwr(int error, struct options i2c_opt, unsigned char *i2c_buf) {
  * iic_msg structures to describe the IO operations, and hand them off to the
  * driver to be handled as a single transfer.
  */
-static int
+	static int
 i2c_rdwr_transfer(char *dev, struct options i2c_opt, unsigned char *i2c_buf)
 {
 	struct iic_msg msgs[2];

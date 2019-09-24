@@ -74,8 +74,6 @@ static int data_available(I2C i2c) {
 	return (buf[0] == 0x00 && buf[1] == 0x01);
 }
 
-// Transliterated from:
-// https://github.com/sparkfun/SparkFun_SCD30_Arduino_Library/
 static void read_measurement(SCD30 s) {
 	usleep(5000);
 
@@ -94,52 +92,39 @@ static void read_measurement(SCD30 s) {
 	uint32_t humidity = 0;
 
 	unsigned char buf[20] = {0}; // heaps big
+	unsigned char *p = buf;
 
 	i2c_get_direct16(s->i2c_info, CMD_READ_MEASUREMENT, 0, 0, 18, buf);
 
-	for (int x = 0 ; x < 18 ; x++) {
-		unsigned char incoming = buf[x];
+	// The data stream looks like this:
+	//
+	// [0]        [1]        [2]   [3]        [4]        [5]
+	// [CO2 MMSB] [CO2 MLSB] [CRC] [CO2 LMSB] [CO2 LLSB] [CRC]
+	//
+	// [6]        [7]        [8]   [9]        [10]       [11]
+	// [TMP MMSB] [TMP MLSB] [CRC] [TMP LMSB] [TMP LLSB] [CRC]
+	//
+	// [12]       [13]       [14]  [15]       [16]       [17]
+	// [HMD MMSB] [HMD MLSB] [CRC] [HMD LMSB] [HMD LLSB] [CRC]
+	//
+	// So, bytes 0, 1, 3, 4 make up the co2 reading, bytes 6, 7, 9, 10
+	// make up the temperature reading, bytes 12, 13, 15, 16 make up the
+	// humiddity reading.
+	// We just ignore the CRC bits (2, 5, 8, 11, 14, 17).
 
-		switch (x)
-		{
-			case 0:
-			case 1:
-			case 3:
-			case 4:
-				co2 <<= 8;
-				co2 |= incoming;
-				break;
-			case 6:
-			case 7:
-			case 9:
-			case 10:
-				temperature <<= 8;
-				temperature |= incoming;
-				break;
-			case 12:
-			case 13:
-			case 15:
-			case 16:
-				humidity <<= 8;
-				humidity |= incoming;
-				break;
-			default:
-				//Do nothing with the CRC bytes
-				break;
-		}
-	}
+	co2 =         (p[0]  << 24) + (p[1]  << 16) + (p[3]  << 8) + (p[4]);
+	temperature = (p[6]  << 24) + (p[7]  << 16) + (p[9]  << 8) + (p[10]);
+	humidity =    (p[12] << 24) + (p[13] << 16) + (p[15] << 8) + (p[16]);
 
-	s->co2 = * (float *) &co2;
+	s->co2 =         * (float *) &co2;
 	s->temperature = * (float *) &temperature;
-	s->humidity = * (float *) &humidity;
+	s->humidity =    * (float *) &humidity;
 
-	printf("CO2: %.0f, temp: %.1f, humid: %.1f\n",
-		s->co2, s->temperature, s->humidity);
+	//printf("CO2: %.0f, temp: %.1f, humid: %.1f\n", s->co2, s->temperature, s->humidity);
 
 	s->read_co2 = 0;
 	s->read_temperature = 0;
 	s->read_humidity = 0;
-
 }
 
 // Temperature in degrees Celsius.
@@ -177,10 +162,3 @@ double scd30_get_co2(SCD30 s) {
 
 	return s->co2;
 }
-
-/*
-int main(void) {
-	SCD30 s = init_scd30(2, 0);
-	read_measurement(s);
-}
-*/

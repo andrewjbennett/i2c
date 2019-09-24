@@ -13,10 +13,21 @@
 #include <math.h>
 
 #include "bmp180.h"
-#include "i2c.h"
+#include "i2c_rdwr.h"
+
+typedef struct calib {
+	int16_t  ac1, ac2, ac3;
+	uint16_t ac4, ac5, ac6;
+	int16_t b1, b2, mb, mc, md;
+} calib;
+
+void bmp180(int UT, int UP);
 
 #define DEBUG 0
+
 #define show(x) if (DEBUG) printf("%3s = %ld\n", #x, (x));
+//#define show(x) (x);
+
 
 #define REG_MEASUREMENT_CONTROL 0xF4
 #define REG_OUTPUT_MSB 0xF6
@@ -27,44 +38,26 @@
 #define READ_TEMP_WAIT     4500 // 4.5ms
 #define READ_PRES_STD_WAIT 7500 // 7.5ms
 
+#define INPUT_SIZE  1
+#define OUTPUT_SIZE 2
+
 #define BMP180_ADDRESS 0x77
 
-struct BMP180 {
-	I2C i2c;
-};
+#define READ 1
+#define WRITE 0
 
-typedef struct calib {
-	int16_t  ac1, ac2, ac3;
-	uint16_t ac4, ac5, ac6;
-	int16_t b1, b2, mb, mc, md;
-} calib;
-
-static long get_temperature_uncomp(BMP180);
-static long get_pressure_uncomp(BMP180);
+static long get_temperature_uncomp(void);
+static long get_pressure_uncomp(void);
 
 // TODO: make this dynamic eventually I guess?
-static calib bmp180_get_calib(void);
+static calib get_calib(void);
 
-// Initialise stuff required for the bmp180 sensor.
-BMP180 bmp180_init(int bus) {
-	I2C i2c = i2c_open(bus, BMP180_ADDRESS);
-
-	if (i2c == NULL) {
-		printf("something went wrong I guess?\n");
-		return NULL;
-	}
-
-	BMP180 bmp180 = calloc(1, sizeof(struct BMP180));
-	bmp180->i2c = i2c;
-
-	return bmp180 ;
-}
 
 // Returns temperature in degrees Celsius.
-double bmp180_get_temperature(BMP180 bmp180) {
+double get_temperature(void) {
 
-	calib k = bmp180_get_calib();
-	long ut = get_temperature_uncomp(bmp180);
+	calib k = get_calib();
+	long ut = get_temperature_uncomp();
 
 	long x1, x2, b5, t;
 	x1 = ((ut - k.ac6) * k.ac5) / (1<<15);	show (x1);
@@ -76,14 +69,14 @@ double bmp180_get_temperature(BMP180 bmp180) {
 }
 
 // Returns pressure in hPa.
-double bmp180_get_pressure(BMP180 bmp180) {
+double get_pressure(void) {
 
 	// TODO: maybe implement this?
 	short oss = 0;
 
-	calib k = bmp180_get_calib();
-	long ut = get_temperature_uncomp(bmp180);
-	long up = get_pressure_uncomp(bmp180) >> (8 - oss);
+	calib k = get_calib();
+	long ut = get_temperature_uncomp();
+	long up = get_pressure_uncomp() >> (8 - oss);
 
 	// Temperature
 	long x1, x2, b5, t;
@@ -120,34 +113,38 @@ double bmp180_get_pressure(BMP180 bmp180) {
 	return p / 100.f;
 }
 
-static long get_temperature_uncomp(BMP180 bmp180) {
+static long get_temperature_uncomp(void) {
+	char buf[10]; // heaps big
 
-	i2c_put_direct8(bmp180->i2c, REG_MEASUREMENT_CONTROL, CMD_READ_TEMP, 1);
+	buf[0] = CMD_READ_TEMP;
+	i2c_rdwr(BMP180_ADDRESS, WRITE, REG_MEASUREMENT_CONTROL, INPUT_SIZE, buf);
+
+	// should be able to replace with
+	//i2c_put(BMP180_ADDRESS, REG_MEASUREMENT_CONTROL, CMD_READ_TEMP);
 
 	usleep(READ_TEMP_WAIT);
 
-	unsigned char buf[10]; // heaps big
-	i2c_get_direct8(bmp180->i2c, REG_OUTPUT_MSB, 0, 0, 2, buf);
-
+	i2c_rdwr(BMP180_ADDRESS, READ, REG_OUTPUT_MSB, OUTPUT_SIZE, buf);
+	//print_buf(buf, 2);
 	long ut = (buf[0] << 8) + buf[1];
+
 	return ut;
 }
 
-static long get_pressure_uncomp(BMP180 bmp180) {
+static long get_pressure_uncomp(void) {
+	char buf[10]; // heaps big
 
-
-	i2c_put_direct8(bmp180->i2c, REG_MEASUREMENT_CONTROL, CMD_READ_PRESSURE, 1);
+	buf[0] = CMD_READ_PRESSURE;
+	i2c_rdwr(BMP180_ADDRESS, WRITE, REG_MEASUREMENT_CONTROL, INPUT_SIZE, buf);
 
 	usleep(READ_PRES_STD_WAIT);
-
-	unsigned char buf[10]; // heaps big
-	i2c_get_direct8(bmp180->i2c, REG_OUTPUT_MSB, 0, 0, 2, buf);
-
+	i2c_rdwr(BMP180_ADDRESS, READ, REG_OUTPUT_MSB, OUTPUT_SIZE, buf);
 	long up = (buf[0] << 16) + (buf[1] << 8) + 0;
+
 	return up;
 }
 
-static calib bmp180_get_calib(void) {
+static calib get_calib(void) {
 	calib k =
 	{
 		.ac1 = 0x2050,

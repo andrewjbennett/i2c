@@ -7,10 +7,11 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "scd30.h"
 
-#include "i2c_rdwr_direct.h"
+#include "i2c.h"
 
 static int data_available(I2C i2c);
 
@@ -41,21 +42,25 @@ struct SCD30 {
 
 };
 
-SCD30 init_scd30(unsigned int interval, unsigned int pressure_offset) {
+SCD30 scd30_init(int bus, unsigned int interval, unsigned int pressure_offset) {
 
-	I2C i2c = i2c_open(3, SCD30_ADDRESS);
+	I2C i2c = i2c_open(bus, SCD30_ADDRESS);
 
 	// start continous measurement
-	i2c_put_direct(i2c, CMD_START_CONT_MEASUREMENT, pressure_offset, 1);
+	// TODO: verify that the pressure offset is sane?
+	i2c_put_direct16(i2c, CMD_START_CONT_MEASUREMENT, pressure_offset, 1);
 
 	// set measurement interval
-	i2c_put_direct(i2c, CMD_SET_MEASUREMENT_INTERVAL, interval, 1);
+	i2c_put_direct16(i2c, CMD_SET_MEASUREMENT_INTERVAL, interval, 1);
 
 	// enable self-calib
-	i2c_put_direct(i2c, CMD_AUTOMATIC_SELF_CALIB, 1, 1);
+	i2c_put_direct16(i2c, CMD_AUTOMATIC_SELF_CALIB, 1, 1);
 
 	struct SCD30 *s = calloc(1, sizeof(struct SCD30));
 	s->i2c_info = i2c;
+	s->read_co2 = 1;
+	s->read_humidity = 1;
+	s->read_temperature = 1;
 
 	return s;
 }
@@ -64,7 +69,7 @@ static int data_available(I2C i2c) {
 
 	unsigned char buf[10] = {0};
 
-	i2c_get_direct(i2c, CMD_GET_DATA_READY_STATUS, 0, 0, 3, buf);
+	i2c_get_direct16(i2c, CMD_GET_DATA_READY_STATUS, 0, 0, 3, buf);
 
 	return (buf[0] == 0x00 && buf[1] == 0x01);
 }
@@ -72,9 +77,13 @@ static int data_available(I2C i2c) {
 // Transliterated from:
 // https://github.com/sparkfun/SparkFun_SCD30_Arduino_Library/
 static void read_measurement(SCD30 s) {
+	usleep(5000);
 
 	if (!data_available(s->i2c_info)) {
-		return;
+		sleep(1);
+		if (!data_available(s->i2c_info)) {
+			return;
+		}
 	}
 
 	// The data is provided as the direct bytes of a float, so we need
@@ -86,7 +95,7 @@ static void read_measurement(SCD30 s) {
 
 	unsigned char buf[20] = {0}; // heaps big
 
-	i2c_get_direct(s->i2c_info, CMD_READ_MEASUREMENT, 0, 0, 18, buf);
+	i2c_get_direct16(s->i2c_info, CMD_READ_MEASUREMENT, 0, 0, 18, buf);
 
 	for (int x = 0 ; x < 18 ; x++) {
 		unsigned char incoming = buf[x];
@@ -134,7 +143,7 @@ static void read_measurement(SCD30 s) {
 }
 
 // Temperature in degrees Celsius.
-double get_temperature(SCD30 s) {
+double scd30_get_temperature(SCD30 s) {
 
 	if (s->read_temperature == 1) {
 		read_measurement(s);
@@ -145,8 +154,8 @@ double get_temperature(SCD30 s) {
 	return s->temperature;
 }
 
-// Humidity in (unit??)
-double get_humidity(SCD30 s) {
+// Humidity in %RH.
+double scd30_get_humidity(SCD30 s) {
 
 	if (s->read_humidity == 1) {
 		read_measurement(s);
@@ -157,8 +166,8 @@ double get_humidity(SCD30 s) {
 	return s->humidity;
 }
 
-// CO2 in (unit)
-double get_co2(SCD30 s) {
+// CO2 in ppm.
+double scd30_get_co2(SCD30 s) {
 
 	if (s->read_co2 == 1) {
 		read_measurement(s);
@@ -169,8 +178,9 @@ double get_co2(SCD30 s) {
 	return s->co2;
 }
 
-
+/*
 int main(void) {
 	SCD30 s = init_scd30(2, 0);
 	read_measurement(s);
 }
+*/

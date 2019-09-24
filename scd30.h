@@ -4,13 +4,13 @@
 typedef struct SCD30 *SCD30;
 
 // Set up stuff, idk
-SCD30 init_scd30(unsigned int interval, unsigned int pressure_offset);
+SCD30 scd30_init(int bus, unsigned int interval, unsigned int pressure_offset);
 
 // Temperature in degrees Celsius.
-double get_temperature(SCD30);
+double scd30_get_temperature(SCD30);
 
-// Humidity in (unit??)
-double get_humidity(SCD30);
+// Humidity in %RH.
+double scd30_get_humidity(SCD30);
 
-// CO2 in (unit)
-double get_co2(SCD30);
+// CO2 in ppm.
+double scd30_get_co2(SCD30);

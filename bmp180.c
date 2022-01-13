@@ -15,6 +15,8 @@
 #include "bmp180.h"
 #include "i2c.h"
 
+// #define USE_STORED_CALIB
+
 #define DEBUG 0
 #define show(x) if (DEBUG) printf("%3s = %ld\n", #x, (x));
 
@@ -43,7 +45,8 @@ static long get_temperature_uncomp(BMP180);
 static long get_pressure_uncomp(BMP180);
 
 // TODO: make this dynamic eventually I guess?
-static calib bmp180_get_calib(void);
+static calib bmp180_get_calib(BMP180);
+static void print_calib(calib k);
 
 // Initialise stuff required for the bmp180 sensor.
 BMP180 bmp180_init(int bus) {
@@ -63,7 +66,7 @@ BMP180 bmp180_init(int bus) {
 // Returns temperature in degrees Celsius.
 double bmp180_get_temperature(BMP180 bmp180) {
 
-	calib k = bmp180_get_calib();
+	calib k = bmp180_get_calib(bmp180);
 	long ut = get_temperature_uncomp(bmp180);
 
 	long x1, x2, b5, t;
@@ -81,7 +84,7 @@ double bmp180_get_pressure(BMP180 bmp180) {
 	// TODO: maybe implement this?
 	short oss = 0;
 
-	calib k = bmp180_get_calib();
+	calib k = bmp180_get_calib(bmp180);
 	long ut = get_temperature_uncomp(bmp180);
 	long up = get_pressure_uncomp(bmp180) >> (8 - oss);
 
@@ -147,9 +150,31 @@ static long get_pressure_uncomp(BMP180 bmp180) {
 	return up;
 }
 
-static calib bmp180_get_calib(void) {
-	calib k =
-	{
+static calib bmp180_get_calib(BMP180 bmp180) {
+
+	uint16_t calib_data[12] = {0};
+
+	uint8_t start = 0xaa;
+	uint8_t end   = 0xbf;
+
+	unsigned char buf[10]; // heaps big
+
+	uint8_t curr = start;
+	int index = 0;
+	while (curr < end) {
+		i2c_get_direct8(bmp180->i2c, curr, 0, 0, 1, buf);
+		calib_data[index] = buf[0] << 8;
+		curr++;
+
+		i2c_get_direct8(bmp180->i2c, curr, 0, 0, 1, buf);
+		calib_data[index] += buf[0];
+		curr++;
+		index++;
+	}
+
+
+	calib k = {
+#ifdef USE_STORED_CALIB
 		.ac1 = 0x2050,
 		.ac2 = 0xfb83,
 		.ac3 = 0xc740,
@@ -161,6 +186,35 @@ static calib bmp180_get_calib(void) {
 		.mb  = 0x8000,
 		.mc  = 0xd1f6,
 		.md  = 0x0b32,
+#else
+		.ac1 = calib_data[0],
+		.ac2 = calib_data[1],
+		.ac3 = calib_data[2],
+		.ac4 = calib_data[3],
+		.ac5 = calib_data[4],
+		.ac6 = calib_data[5],
+		.b1  = calib_data[6],
+		.b2  = calib_data[7],
+		.mb  = calib_data[8],
+		.mc  = calib_data[9],
+		.md  = calib_data[10],
+#endif
 	};
+
 	return k;
+}
+
+static void print_calib(calib k) {
+	printf("ac1: %02x, ", k.ac1);
+	printf("ac2: %02x, ", k.ac2);
+	printf("ac3: %02x, ", k.ac3);
+	printf("ac4: %02x, ", k.ac4);
+	printf("ac5: %02x, ", k.ac5);
+	printf("ac6: %02x, ", k.ac6);
+	printf("b1 : %02x, ", k.b1 );
+	printf("b2 : %02x, ", k.b2 );
+	printf("mb : %02x, ", k.mb );
+	printf("mc : %02x, ", k.mc );
+	printf("md : %02x, ", k.md );
+	printf("\n");
 }

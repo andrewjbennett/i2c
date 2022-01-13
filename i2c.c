@@ -28,7 +28,7 @@ static void dump_buf(unsigned int count, unsigned char *buf);
 
 // Writes command + argument, then reads `count` bytes into `buf`.
 // Assumes 2 byte command + optional 2 byte argument.
-int i2c_get_direct16(I2C i2c, uint16_t command, uint16_t argument,
+int i2c_get_direct16_orig(I2C i2c, uint16_t command, uint16_t argument,
 	int has_argument, unsigned int count, unsigned char *buf) {
 
 	unsigned char input_buf[10] = {0};
@@ -44,6 +44,31 @@ int i2c_get_direct16(I2C i2c, uint16_t command, uint16_t argument,
 
 	i2c_write_raw(i2c, input_count, input_buf);
 	int bytes = i2c_read_raw(i2c, count, buf);
+
+	return bytes;
+}
+
+int i2c_get_direct16(I2C i2c, uint16_t command, uint16_t argument,
+	int has_argument, unsigned int count, unsigned char *buf) {
+
+	unsigned char input_buf[10] = {0};
+
+	input_buf[0] = (command >> 8) & 0xff;
+	i2c_write_raw(i2c, 1, input_buf);
+
+	input_buf[0] = (command) & 0xff;
+	i2c_write_raw(i2c, 1, input_buf);
+
+	if (has_argument) {
+		input_buf[0] = (argument >> 8) & 0xff;
+		i2c_write_raw(i2c, 1, input_buf);
+
+		input_buf[0] = (argument) & 0xff;
+		i2c_write_raw(i2c, 1, input_buf);
+	}
+
+	int bytes = i2c_read_raw(i2c, count, buf);
+	dump_buf(count, buf);
 
 	return bytes;
 }
@@ -121,7 +146,7 @@ int i2c_read_raw(I2C i2c, unsigned int count, unsigned char *buf) {
 	int bytes_read = read(i2c->fd, buf, count);
 
 	if (bytes_read != count) {
-		fprintf(stderr, "huh? didn't read as many as we wanted?\n");
+		fprintf(stderr, "huh? didn't read as many as we wanted? only read %d bytes (wanted %d)\n", bytes_read, count);
 	}
 
 	//printf("read: "); dump_buf(count, buf);
@@ -136,7 +161,7 @@ int i2c_write_raw(I2C i2c, unsigned int count, unsigned char *buf) {
 	int bytes_written = write(i2c->fd, buf, count);
 
 	if (bytes_written != count) {
-		fprintf(stderr, "huh? didn't write as many as we wanted?\n");
+		fprintf(stderr, "huh? didn't write as many as we wanted? only wrote %d bytes (wanted %d)\n", bytes_written, count);
 	}
 
 	//printf("write: "); dump_buf(count, buf);

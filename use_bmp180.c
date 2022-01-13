@@ -6,9 +6,10 @@
 
 int main(void) {
 
-    double temperature = get_temperature();
+    BMP180 bmp180 = bmp180_init(1);
+    double temperature = bmp180_get_temperature(bmp180);
     printf ("temperature = %.1lf'C\n", temperature);
 
-    double pressure = get_pressure();
+    double pressure = bmp180_get_pressure(bmp180);
     printf ("pressure    = %.0lf hPa\n", pressure);
 }

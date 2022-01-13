@@ -15,6 +15,12 @@
 
 static int data_available(I2C i2c);
 
+// Create a new SCD30 object (struct pointer).
+SCD30 scd30_new(I2C i2c);
+
+// Parse a buffer of measurements into the SCD30 object.
+void parse_measurement(SCD30 s, unsigned char p[20]);
+
 #define SCD30_ADDRESS 0x61
 
 #define CMD_START_CONT_MEASUREMENT   0x0010
@@ -56,7 +62,12 @@ SCD30 scd30_init(int bus, unsigned int interval, unsigned int pressure_offset) {
 	// enable self-calib
 	i2c_put_direct16(i2c, CMD_AUTOMATIC_SELF_CALIB, 1, 1);
 
+	return scd30_new(i2c);
+}
+
+SCD30 scd30_new(I2C i2c) {
 	struct SCD30 *s = calloc(1, sizeof(struct SCD30));
+
 	s->i2c_info = i2c;
 	s->read_co2 = 1;
 	s->read_humidity = 1;
@@ -76,6 +87,8 @@ static int data_available(I2C i2c) {
 	return (buf[0] == 0x00 && buf[1] == 0x01);
 }
 
+// 
+
 static void read_measurement(SCD30 s) {
 	usleep(5000);
 
@@ -88,17 +101,23 @@ static void read_measurement(SCD30 s) {
 		}
 	}
 
+
+	unsigned char buf[20] = {0}; // heaps big
+	unsigned char *p = buf;
+
+	i2c_get_direct16(s->i2c_info, CMD_READ_MEASUREMENT, 0, 0, 18, buf);
+
+	parse_measurement(s, buf);
+}
+
+void parse_measurement(SCD30 s, unsigned char p[20]) {
+
 	// The data is provided as the direct bytes of a float, so we need
 	// to temporarily save them in uint32s to put the bytes in, then
 	// say later that it's actually a float.
 	uint32_t co2 = 0;
 	uint32_t temperature = 0;
 	uint32_t humidity = 0;
-
-	unsigned char buf[20] = {0}; // heaps big
-	unsigned char *p = buf;
-
-	i2c_get_direct16(s->i2c_info, CMD_READ_MEASUREMENT, 0, 0, 18, buf);
 
 	// The data stream looks like this:
 	//
